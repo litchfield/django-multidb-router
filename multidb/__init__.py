@@ -32,7 +32,7 @@ import random
 
 from django.conf import settings
 
-from .pinning import this_thread_is_pinned
+from .pinning import this_thread_is_pinned, pin_this_thread
 
 
 DEFAULT_DB_ALIAS = 'default'
@@ -79,12 +79,14 @@ class PinningMasterSlaveRouter(MasterSlaveRouter):
     """Router that sends reads to master iff a certain flag is set. Writes
     always go to master.
 
-    Typically, we set a cookie in middleware when the request is a POST and
-    give it a max age that's certain to be longer than the replication lag. The
-    flag comes from that cookie.
-
     """
     def db_for_read(self, model, **hints):
         """Send reads to slaves in round-robin unless this thread is "stuck" to
         the master."""
         return DEFAULT_DB_ALIAS if this_thread_is_pinned() else get_slave()
+
+    def db_for_write(self, model, **hints):
+        """Send all writes to the master."""
+        if not this_thread_is_pinned():
+            pin_this_thread()
+        return DEFAULT_DB_ALIAS
